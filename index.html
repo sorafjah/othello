@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>3Dオセロ れんしゅう対局</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --felt:#1f6b3c;
+    --wood:#5a3d26;
+    --ink:#1c2430;
+    --paper:#f5f1e6;
+    --amber:#e8a13c;
+    --alert:#c94f3d;
+    --chip:rgba(245,241,230,.92);
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; overflow:hidden; }
+  body{
+    font-family:'BIZ UDPGothic', sans-serif;
+    background:radial-gradient(120% 120% at 50% 30%, #8aa4b2 0%, #6c8798 55%, #506b7c 100%);
+    color:var(--ink);
+    touch-action:manipulation;
+    overscroll-behavior:none;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  #stage{ position:fixed; inset:0; }
+  #stage canvas{ display:block; touch-action:none; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; inset:0; pointer-events:none; }
+  .chip{
+    background:var(--chip); border-radius:14px;
+    box-shadow:0 2px 10px rgba(0,0,0,.25);
+    padding:8px 14px;
+  }
+  #turnChip{
+    position:fixed; top:10px; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    min-width:220px; text-align:center;
+  }
+  #turnMain{ display:flex; align-items:center; gap:8px; font-size:18px; font-weight:700; }
+  .disc{ width:18px; height:18px; border-radius:50%; border:2px solid #333; }
+  .disc.black{ background:#1a1a1a; }
+  .disc.white{ background:#f4f4f0; }
+  #turnSub{ font-size:12px; color:#5b6470; }
+  #timerPill{
+    position:fixed; top:74px; left:50%; transform:translateX(-50%);
+    font-size:22px; font-weight:700; letter-spacing:1px;
+    display:none; padding:6px 18px;
+  }
+  #timerPill.warn{ color:var(--alert); }
+  .countChip{ position:fixed; top:10px; font-size:14px; font-weight:700;
+    display:flex; align-items:center; gap:6px; }
+  #countBlack{ left:10px; }
+  #countWhite{ right:10px; }
+
+  /* ---- ボタン ---- */
+  button{
+    font-family:'BIZ UDPGothic', sans-serif;
+    font-size:16px; font-weight:700;
+    border:none; border-radius:14px;
+    min-height:52px; min-width:130px;
+    padding:10px 22px;
+    box-shadow:0 3px 8px rgba(0,0,0,.3);
+    pointer-events:auto; cursor:pointer;
+  }
+  button:active{ transform:translateY(1px); }
+  #passBtn{
+    position:fixed; left:14px; bottom:14px;
+    background:var(--chip); color:var(--ink);
+  }
+  #modalOk{ width:100%; background:#8fc93a; color:#20330a; }
+
+  /* ---- ヒントバナー ---- */
+  #hintBanner{
+    position:fixed; bottom:84px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--amber); color:#3a2a08;
+    font-size:14px; font-weight:700;
+    padding:10px 18px; border-radius:999px;
+    box-shadow:0 3px 10px rgba(0,0,0,.3);
+    opacity:0; transition:opacity .3s, transform .3s;
+    pointer-events:none; max-width:90vw; text-align:center;
+  }
+  #hintBanner.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---- 案内モーダル ---- */
+  #modal{
+    position:fixed; inset:0; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(120,145,160,.55);
+    pointer-events:auto; z-index:20;
+  }
+  #modal.open{ display:flex; }
+  #modalCard{
+    background:var(--paper); border-radius:18px;
+    border:4px solid var(--amber);
+    width:min(360px, 88vw); padding:22px 20px 18px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+    text-align:center;
+  }
+  #modalTitle{ font-size:15px; font-weight:700; color:var(--alert); margin-bottom:8px; letter-spacing:2px; }
+  #modalTitle.info{ color:var(--felt); }
+  #modalText{ font-size:16px; line-height:1.7; font-weight:700; margin-bottom:16px; white-space:pre-wrap; }
+
+  /* ---- 対局終了 ---- */
+  #overModal{
+    position:fixed; inset:0; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(120,145,160,.6);
+    pointer-events:auto; z-index:30;
+  }
+  #overModal.open{ display:flex; }
+  #overCard{
+    background:var(--paper); border-radius:18px;
+    border:4px solid var(--felt);
+    width:min(360px, 88vw); padding:26px 20px 20px;
+    text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  #overTitle{ font-size:22px; font-weight:700; margin-bottom:14px; }
+  #overScore{ font-size:17px; font-weight:700; margin-bottom:18px; line-height:1.8; }
+  #restartBtn{ width:100%; background:var(--felt); color:#fff; }
+
+  @media print{ button, #hud{ display:none !important; } }
+</style>
+</head>
+<body>
+<!-- build: 2026-07-19 3Dオセロ れんしゅう対局 v1 -->
+<div id="stage"></div>
+
+<div id="hud">
+  <div id="turnChip" class="chip">
+    <div id="turnMain"><span class="disc black" id="turnDisc"></span><span id="turnText">黒の番</span></div>
+    <div id="turnSub">トレイから石をスワイプして置く</div>
+  </div>
+  <div id="timerPill" class="chip">60</div>
+  <div id="countBlack" class="chip countChip"><span class="disc black"></span><span id="countBlackNum">2</span></div>
+  <div id="countWhite" class="chip countChip"><span class="disc white"></span><span id="countWhiteNum">2</span></div>
+  <div id="hintBanner">💡 まだひっくり返せる石があるかもしれません</div>
+</div>
+
+<button id="passBtn">パス</button>
+
+<div id="modal">
+  <div id="modalCard">
+    <div id="modalTitle">ちょっと待って</div>
+    <div id="modalText"></div>
+    <button id="modalOk">わかりました</button>
+  </div>
+</div>
+
+<div id="overModal">
+  <div id="overCard">
+    <div id="overTitle">対局終了</div>
+    <div id="overScore"></div>
+    <button id="restartBtn">もう一度あそぶ</button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* =========================================================
+   3Dオセロ れんしゅう対局
+   - 石はプレイヤーが自分で置き、自分でひっくり返す
+   - 現実の対局で起こるミスをそのまま再現し、都度案内する
+   - 石の見た目（メッシュ）は board データモデルから駆動される
+     （position直接操作ではなく、内部データが正）
+   ========================================================= */
+
+/* ---------- 定数 ---------- */
+const S = 1.1;                 // マスのサイズ
+const N = 8;                   // 盤サイズ
+const FLIP_TIME_LIMIT = 60;    // 反転フェーズ制限時間（秒）
+const HINT_AT = 15;            // 残り何秒でヒントを出すか
+const TRAY_X = 6.6;            // トレイ中心のx座標（±）
+const TRAY_COUNT = 30;         // 各トレイの石数（64 - 初期4 = 60 の半分）
+const DIRS = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+
+const MSG = {
+  notYourTurn : '今はあなたの番ではありません',
+  illegalPlace: 'そこには置けません。\n石を挟める場所を選んでください',
+  occupied    : 'そこにはすでに石があります',
+  ownStone    : 'ちょっと待って。\n自分の色の石はひっくり返せません。\n自分の石同士で挟んでも、挟んだことにはなりません',
+  notSandwich : 'ちょっと待って。\nその石は今回の一手では挟んでいません',
+  hint        : '💡 まだひっくり返せる石があるかもしれません',
+  noMoves     : (name)=>`${name}は置ける場所がありません。\nパスしてください`,
+  cannotPass  : '置ける場所があります。\nパスはできません',
+};
+
+/* ---------- ゲーム状態 ---------- */
+const G = {
+  state: 'TURN_START',          // TURN_START / PLACING / FLIPPING / CHECKING / TURN_END / GAME_OVER
+  board: Array.from({length:N}, ()=>Array(N).fill(null)), // board[row][col] = null|'black'|'white'
+  currentPlayer: 'black',
+  mustPass: false,
+  passCount: 0,
+  pendingFlips: [],             // 今回の一手で反転すべき正解の座標 [{x,y},...]
+  flippedByPlayer: [],          // プレイヤーが実際に反転した座標
+  remainingTime: FLIP_TIME_LIMIT,
+  isTimerPaused: false,
+  hintShown: false,
+  turnSerial: 0,                // 非同期処理のガード用
+  lastMessage: '',
+  frames: 0,
+  elapsed: 0,
+};
+
+const boardStones = Array.from({length:N}, ()=>Array(N).fill(null)); // 石オブジェクト参照
+const trayStones = { black: [], white: [] };
+
+/* ---------- ルール関数 ---------- */
+function inBounds(x,y){ return x>=0 && x<N && y>=0 && y<N; }
+function opponent(c){ return c==='black' ? 'white' : 'black'; }
+
+function flipsFor(x, y, color){
+  if(G.board[y][x] !== null) return [];
+  const result = [];
+  for(const [dx,dy] of DIRS){
+    const run = [];
+    let nx = x+dx, ny = y+dy;
+    while(inBounds(nx,ny) && G.board[ny][nx] === opponent(color)){
+      run.push({x:nx, y:ny});
+      nx += dx; ny += dy;
+    }
+    if(run.length > 0 && inBounds(nx,ny) && G.board[ny][nx] === color){
+      result.push(...run);
+    }
+  }
+  return result;
+}
+
+function legalMoves(color){
+  const moves = [];
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+    if(G.board[y][x]===null && flipsFor(x,y,color).length>0) moves.push({x,y});
+  }
+  return moves;
+}
+
+function countStones(){
+  let b=0,w=0;
+  for(const row of G.board) for(const c of row){
+    if(c==='black') b++; else if(c==='white') w++;
+  }
+  return {black:b, white:w, empty:N*N-b-w};
+}
+
+/* ---------- Web Audio ---------- */
+let actx = null;
+function audio(){
+  if(!actx){ actx = new (window.AudioContext||window.webkitAudioContext)(); }
+  if(actx.state==='suspended') actx.resume();
+  return actx;
+}
+function tone(freq, dur, type='sine', vol=0.14, when=0){
+  try{
+    const ctx = audio();
+    const t0 = ctx.currentTime + when;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0008, t0+dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }catch(e){ /* 音は失敗しても進行に影響なし */ }
+}
+const sound = {
+  place(){ tone(170, .1, 'sine', .2); tone(340, .06, 'sine', .08, .01); },
+  flip(){  tone(420, .08, 'sine', .12); tone(640, .1, 'sine', .1, .06); },
+  error(){ tone(130, .22, 'square', .1); },
+  hint(){  tone(880, .12, 'triangle', .1); tone(1100, .16, 'triangle', .08, .1); },
+  chime(){ tone(660, .18, 'sine', .1); tone(990, .24, 'sine', .08, .1); },
+  over(){  [523,659,784,1047].forEach((f,i)=>tone(f, .3, 'sine', .1, i*0.12)); },
+};
+
+/* ---------- Three.js セットアップ ---------- */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x6c8798);
+
+const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('stage').appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6b7f78, 1.6));
+const dir = new THREE.DirectionalLight(0xffffff, 2.1);
+dir.position.set(5, 12, 5);
+dir.castShadow = true;
+dir.shadow.mapSize.set(1024, 1024);
+dir.shadow.camera.left = -9; dir.shadow.camera.right = 9;
+dir.shadow.camera.top = 9; dir.shadow.camera.bottom = -9;
+dir.shadow.camera.near = 1; dir.shadow.camera.far = 30;
+dir.shadow.bias = -0.0015;
+scene.add(dir);
+const fillDir = new THREE.DirectionalLight(0xffffff, 0.7);
+fillDir.position.set(-6, 8, -4);
+scene.add(fillDir);
+
+function fitCamera(){
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w/h;
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
+  const distH = 8.4 / (tanV * camera.aspect);
+  const distV = 7.4 / tanV;
+  const d = Math.max(distH, distV) * 1.06;
+  camera.position.set(0, d*0.82, d*0.66);
+  camera.lookAt(0, 0, 0.2);
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', fitCamera);
+fitCamera();
+
+/* ---- 床（テーブル面） ---- */
+{
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(30, 22),
+    new THREE.MeshStandardMaterial({ color:0xd9c9a3, roughness:.9 }));
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = -0.66;
+  floor.receiveShadow = true;
+  scene.add(floor);
+}
+
+/* ---- 盤 ---- */
+{
+  const rim = new THREE.Mesh(
+    new THREE.BoxGeometry(N*S+1.0, 0.6, N*S+1.0),
+    new THREE.MeshStandardMaterial({ color:0x4f331e, roughness:.55 }));
+  rim.position.y = -0.32;
+  rim.castShadow = true;
+  scene.add(rim);
+
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(N*S+0.2, 0.5, N*S+0.2),
+    new THREE.MeshStandardMaterial({ color:0x0f4c26, roughness:.85 }));
+  base.position.y = -0.26;
+  scene.add(base);
+
+  const cellGeo = new THREE.PlaneGeometry(S-0.08, S-0.08);
+  const cellMat = new THREE.MeshStandardMaterial({ color:0x186a37, roughness:.8 });
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+    const p = new THREE.Mesh(cellGeo, cellMat);
+    p.rotation.x = -Math.PI/2;
+    p.position.set((x-3.5)*S, 0.002, (y-3.5)*S);
+    scene.add(p);
+  }
+}
+
+/* ---- トレイ ---- */
+{
+  const trayMat = new THREE.MeshStandardMaterial({ color:0x6b4a2e, roughness:.65 });
+  for(const sx of [-1, 1]){
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.26, 4.7), trayMat);
+    tray.position.set(sx*TRAY_X, -0.12, 0);
+    tray.castShadow = true;
+    scene.add(tray);
+  }
+}
+
+/* ---- 石 ---- */
+const stoneGeoTop = new THREE.CylinderGeometry(0.44, 0.44, 0.09, 36);
+const stoneMatBlack = new THREE.MeshStandardMaterial({ color:0x181818, roughness:.35 });
+const stoneMatWhite = new THREE.MeshStandardMaterial({ color:0xf2f0e8, roughness:.35 });
+const pickTargets = []; // レイキャスト対象メッシュ
+
+// 石 = 黒半分＋白半分のグループ。rotation.x=0で黒が上、PIで白が上。
+function makeStone(color){
+  const grp = new THREE.Group();
+  const top = new THREE.Mesh(stoneGeoTop, stoneMatBlack);
+  top.position.y = 0.045;
+  const bot = new THREE.Mesh(stoneGeoTop, stoneMatWhite);
+  bot.position.y = -0.045;
+  grp.add(top, bot);
+  const stone = { group:grp, color, place:'tray', trayColor:null, cell:null };
+  top.userData.owner = stone; bot.userData.owner = stone;
+  pickTargets.push(top, bot);
+  grp.rotation.x = (color==='black') ? 0 : Math.PI;
+  scene.add(grp);
+  return stone;
+}
+
+function traySlotPos(color, i){
+  const sx = (color==='black') ? -1 : 1;
+  const pile = Math.floor(i/5), level = i%5;
+  const px = (pile%2===0 ? -0.72 : 0.72);
+  const pz = (Math.floor(pile/2)-1) * 1.45;
+  return new THREE.Vector3(sx*TRAY_X + px, 0.11 + level*0.19, pz);
+}
+function cellPos(x, y){
+  return new THREE.Vector3((x-3.5)*S, 0.135, (y-3.5)*S);
+}
+
+// トレイの石を用意
+for(const color of ['black','white']){
+  for(let i=0;i<TRAY_COUNT;i++){
+    const st = makeStone(color);
+    st.trayColor = color;
+    st.group.position.copy(traySlotPos(color, i));
+    trayStones[color].push(st);
+  }
+}
+// 初期配置（中央4つ）
+function initCenter(x, y, color){
+  const st = makeStone(color);
+  st.place = 'board'; st.trayColor = null; st.cell = {x,y};
+  st.group.position.copy(cellPos(x,y));
+  G.board[y][x] = color;
+  boardStones[y][x] = st;
+}
+initCenter(3,3,'white'); initCenter(4,4,'white');
+initCenter(4,3,'black'); initCenter(3,4,'black');
+
+/* ---------- アニメーション（tween） ---------- */
+const anims = [];
+function animate(dur, update, onDone){
+  anims.push({ t:0, dur, update, onDone });
+}
+function ease(k){ return k<0.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2; }
+
+function animMove(stone, to, dur=0.2, hop=0.4, onDone){
+  const from = stone.group.position.clone();
+  animate(dur, k=>{
+    const e = ease(k);
+    stone.group.position.lerpVectors(from, to, e);
+    stone.group.position.y = THREE.MathUtils.lerp(from.y, to.y, e) + Math.sin(e*Math.PI)*hop;
+  }, ()=>{ stone.group.position.copy(to); if(onDone) onDone(); });
+}
+function animFlip(stone){
+  const fromRot = stone.group.rotation.x;
+  const toRot = fromRot + Math.PI;
+  const baseY = stone.group.position.y;
+  animate(0.35, k=>{
+    const e = ease(k);
+    stone.group.rotation.x = THREE.MathUtils.lerp(fromRot, toRot, e);
+    stone.group.position.y = baseY + Math.sin(e*Math.PI)*0.45;
+  }, ()=>{
+    stone.group.rotation.x = (stone.color==='black') ? 0 : Math.PI;
+    stone.group.position.y = baseY;
+  });
+}
+
+/* ---------- HUD ---------- */
+const el = id=>document.getElementById(id);
+const playerName = c => c==='black' ? '黒' : '白';
+
+function updateHUD(){
+  el('turnDisc').className = 'disc ' + G.currentPlayer;
+  el('turnText').textContent = playerName(G.currentPlayer) + 'の番';
+  el('turnSub').textContent =
+    G.state==='FLIPPING' ? '挟んだ石をタップでひっくり返す'
+    : G.mustPass ? 'パスボタンを押してください'
+    : 'トレイから石をスワイプして置く';
+  const c = countStones();
+  el('countBlackNum').textContent = c.black;
+  el('countWhiteNum').textContent = c.white;
+  el('timerPill').style.display  = (G.state==='FLIPPING') ? 'block' : 'none';
+}
+
+let hintTimer = null;
+function showHint(){
+  el('hintBanner').textContent = MSG.hint;
+  el('hintBanner').classList.add('show');
+  sound.hint();
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(()=>el('hintBanner').classList.remove('show'), 6000);
+}
+function hideHint(){
+  clearTimeout(hintTimer);
+  el('hintBanner').classList.remove('show');
+}
+
+/* ---------- 案内モーダル ---------- */
+let guidancePending = false;
+function guide(text, kind='alert'){
+  if(guidancePending || el('modal').classList.contains('open')) return;
+  guidancePending = true;
+  if(G.state==='FLIPPING') G.isTimerPaused = true;   // 表示までの間もカウントしない
+  setTimeout(()=>{
+    guidancePending = false;
+    G.lastMessage = text;
+    el('modalTitle').textContent = (kind==='alert') ? 'ちょっと待って' : 'ご案内';
+    el('modalTitle').className = (kind==='alert') ? '' : 'info';
+    el('modalText').textContent = text;
+    el('modal').classList.add('open');
+    if(kind==='alert') sound.error(); else sound.chime();
+  }, 260);
+}
+function dismissGuide(){
+  el('modal').classList.remove('open');
+  G.isTimerPaused = false;
+}
+el('modalOk').addEventListener('click', dismissGuide);
+
+/* ---------- 手番の進行 ---------- */
+function startTurn(){
+  G.turnSerial++;
+  G.state = 'TURN_START';
+  G.pendingFlips = [];
+  G.flippedByPlayer = [];
+  G.remainingTime = FLIP_TIME_LIMIT;
+  G.isTimerPaused = false;
+  G.hintShown = false;
+  hideHint();
+
+  const c = countStones();
+  if(c.empty===0){ gameOver(); return; }
+
+  const myMoves = legalMoves(G.currentPlayer);
+  if(myMoves.length===0){
+    if(legalMoves(opponent(G.currentPlayer)).length===0){ gameOver(); return; }
+    G.mustPass = true;
+    G.state = 'PLACING';
+    updateHUD();
+    guide(MSG.noMoves(playerName(G.currentPlayer)), 'info');
+  }else{
+    G.mustPass = false;
+    G.state = 'PLACING';
+    updateHUD();
+  }
+}
+
+function placeStone(x, y){
+  const flips = flipsFor(x, y, G.currentPlayer);
+  const st = trayStones[G.currentPlayer].pop();
+  st.place = 'board'; st.trayColor = null; st.cell = {x,y};
+  animMove(st, cellPos(x,y), 0.18, 0.25);
+  G.board[y][x] = G.currentPlayer;
+  boardStones[y][x] = st;
+
+  G.pendingFlips = flips;
+  G.flippedByPlayer = [];
+  G.remainingTime = FLIP_TIME_LIMIT;
+  G.isTimerPaused = false;
+  G.hintShown = false;
+  G.passCount = 0;
+  G.state = 'FLIPPING';
+  sound.place();
+  updateHUD();
+}
+
+function handleFlipTap(x, y){
+  if(G.state!=='FLIPPING') return;
+  const color = G.board[y][x];
+  if(color===null) return;
+
+  if(color===G.currentPlayer){
+    guide(MSG.ownStone);                       // 自分の石（すでに反転済み含む）
+    return;
+  }
+  const hit = G.pendingFlips.find(p=>p.x===x && p.y===y);
+  if(!hit){
+    guide(MSG.notSandwich);                    // 挟んでいない石＝ひっくり返しすぎ
+    return;
+  }
+  // 正しい反転：データモデルを先に更新し、見た目を追従させる
+  const st = boardStones[y][x];
+  G.board[y][x] = G.currentPlayer;
+  st.color = G.currentPlayer;
+  G.flippedByPlayer.push({x,y});
+  animFlip(st);
+  sound.flip();
+  updateHUD();
+
+  // 過不足なく完了 → 自動でそのまま次へ（現実的な進行）
+  if(G.flippedByPlayer.length === G.pendingFlips.length){
+    const serial = G.turnSerial;
+    setTimeout(()=>{
+      if(serial===G.turnSerial && G.state==='FLIPPING') finishTurn();
+    }, 650);
+  }
+}
+
+function finishTurn(){
+  if(G.state!=='FLIPPING') return;
+  G.state = 'CHECKING';
+  hideHint();
+  updateHUD();
+  // 反転漏れが残っていても、そのまま進む（現実に起きたミスとして許容する）
+  G.state = 'TURN_END';
+  sound.chime();
+  G.currentPlayer = opponent(G.currentPlayer);
+  startTurn();
+}
+
+function passAction(){
+  if(G.state!=='PLACING') return;
+  if(!G.mustPass){
+    guide(MSG.cannotPass);
+    return;
+  }
+  G.passCount++;
+  if(G.passCount>=2){ gameOver(); return; }
+  sound.chime();
+  G.currentPlayer = opponent(G.currentPlayer);
+  startTurn();
+}
+
+function gameOver(){
+  G.turnSerial++;
+  G.state = 'GAME_OVER';
+  hideHint();
+  updateHUD();
+  const c = countStones();
+  const title = c.black===c.white ? 'ひきわけ！'
+    : (c.black>c.white ? '黒の勝ち！' : '白の勝ち！');
+  el('overTitle').textContent = title;
+  el('overScore').innerHTML = `⚫ 黒：${c.black}<br>⚪ 白：${c.white}`;
+  el('overModal').classList.add('open');
+  sound.over();
+}
+el('restartBtn').addEventListener('click', ()=>location.reload());
+el('passBtn').addEventListener('click', ()=>{ audio(); passAction(); });
+
+/* ---------- 入力（スワイプ配置・タップ反転） ---------- */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const HOVER_Y = 0.85;   // ドラッグ中、見た目上だけ持ち上げる高さ
+const BOARD_Y = 0.135;  // 実際の盤面（石が置かれる）高さ
+const dragPlane  = new THREE.Plane(new THREE.Vector3(0,1,0), -HOVER_Y); // 見た目の追従用
+const boardPlane = new THREE.Plane(new THREE.Vector3(0,1,0), -BOARD_Y); // マス判定はこちらの高さで行う
+let dragging = null;       // ドラッグ中の石
+let tapCandidate = null;   // タップ判定用 {x,y,cx,cy,t}
+
+function setNDC(e){
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((e.clientX-r.left)/r.width)*2-1;
+  ndc.y = -((e.clientY-r.top)/r.height)*2+1;
+  raycaster.setFromCamera(ndc, camera);
+}
+
+function onPointerDown(e){
+  audio();
+  if(G.state==='GAME_OVER') return;
+  // モーダル表示中、またはボタン上のタッチは3D側に届かせない
+  if(el('modal').classList.contains('open')) return;
+  if(el('overModal').classList.contains('open')) return;
+  if(guidancePending) return;
+  if(e.target.closest && e.target.closest('button')) return;
+  setNDC(e);
+  const hits = raycaster.intersectObjects(pickTargets, false);
+  if(hits.length===0) return;
+  const st = hits[0].object.userData.owner;
+
+  if(st.place==='tray'){
+    // ---- トレイの石に触った ----
+    if(st.trayColor !== G.currentPlayer){
+      guide(MSG.notYourTurn);                  // 順番ぬかし
+      return;
+    }
+    if(G.state!=='PLACING') return;            // 反転中に自分のトレイ→無視
+    if(G.mustPass){
+      guide(MSG.noMoves(playerName(G.currentPlayer)), 'info');
+      return;
+    }
+    dragging = trayStones[G.currentPlayer][trayStones[G.currentPlayer].length-1];
+  }else{
+    // ---- 盤上の石に触った → タップ候補 ----
+    tapCandidate = { x:st.cell.x, y:st.cell.y, cx:e.clientX, cy:e.clientY, t:performance.now() };
+  }
+}
+
+function onPointerMove(e){
+  if(!dragging) return;
+  setNDC(e);
+  const p = new THREE.Vector3();
+  if(raycaster.ray.intersectPlane(dragPlane, p)){
+    dragging.group.position.set(
+      THREE.MathUtils.clamp(p.x, -TRAY_X-1.5, TRAY_X+1.5), HOVER_Y,
+      THREE.MathUtils.clamp(p.z, -6, 6));
+  }
+}
+
+function returnToTray(st){
+  const idx = trayStones[st.trayColor].indexOf(st);
+  animMove(st, traySlotPos(st.trayColor, idx), 0.25, 0.3);
+}
+
+function onPointerUp(e){
+  if(dragging){
+    const st = dragging; dragging = null;
+    setNDC(e);
+    const p = new THREE.Vector3();
+    raycaster.ray.intersectPlane(boardPlane, p);   // 盤面の実高さで判定（ホバー高さとズレないように）
+    const col = Math.round(p.x/S + 3.5);
+    const row = Math.round(p.z/S + 3.5);
+    if(!inBounds(col,row)){
+      returnToTray(st);                        // 盤外→そっと戻す
+    }else if(G.board[row][col]!==null){
+      guide(MSG.occupied);
+      returnToTray(st);
+    }else if(flipsFor(col,row,G.currentPlayer).length===0){
+      guide(MSG.illegalPlace);                 // 変な場所に置いた
+      returnToTray(st);
+    }else{
+      placeStone(col,row);
+    }
+    return;
+  }
+  if(tapCandidate){
+    const dx = e.clientX-tapCandidate.cx, dy = e.clientY-tapCandidate.cy;
+    const isTap = Math.hypot(dx,dy)<14 && (performance.now()-tapCandidate.t)<600;
+    if(isTap) handleFlipTap(tapCandidate.x, tapCandidate.y);
+    tapCandidate = null;
+  }
+}
+window.addEventListener('pointerdown', onPointerDown);
+window.addEventListener('pointermove', onPointerMove);
+window.addEventListener('pointerup', onPointerUp);
+window.addEventListener('pointercancel', ()=>{ if(dragging){ returnToTray(dragging); dragging=null; } tapCandidate=null; });
+
+/* ---------- iPad対応（ズーム・スクロール防止） ---------- */
+document.addEventListener('gesturestart', e=>e.preventDefault());
+document.addEventListener('touchmove', e=>e.preventDefault(), { passive:false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e=>{
+  const now = performance.now();
+  if(now - lastTouchEnd < 300) e.preventDefault();  // ダブルタップズームをブロック
+  lastTouchEnd = now;
+}, { passive:false });
+document.addEventListener('contextmenu', e=>e.preventDefault());
+
+/* ---------- メインループ ---------- */
+const clock = new THREE.Clock();
+function loop(){
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 1/30);   // 120Hz ProMotion対応クランプ
+  G.frames++; G.elapsed += dt;
+
+  // アニメーション更新
+  for(let i=anims.length-1;i>=0;i--){
+    const a = anims[i];
+    a.t += dt;
+    const k = Math.min(a.t/a.dur, 1);
+    a.update(k);
+    if(k>=1){ anims.splice(i,1); if(a.onDone) a.onDone(); }
+  }
+
+  // 反転タイマー
+  if(G.state==='FLIPPING' && !G.isTimerPaused){
+    G.remainingTime = Math.max(0, G.remainingTime - dt);
+    const missing = G.pendingFlips.length - G.flippedByPlayer.length;
+    if(!G.hintShown && G.remainingTime<=HINT_AT && missing>0){
+      G.hintShown = true;
+      showHint();                                // 強制はしない。気づくきっかけだけ
+    }
+    if(G.remainingTime<=0){
+      finishTurn();                              // 時間切れ→漏れたまま進む
+    }
+    const t = Math.ceil(G.remainingTime);
+    el('timerPill').textContent = t;
+    el('timerPill').classList.toggle('warn', t<=HINT_AT);
+  }
+
+  syncHooks();
+  renderer.render(scene, camera);
+}
+
+/* ---------- テストフック ---------- */
+window.__game = {
+  state:'', board:null, currentPlayer:'', mustPass:false,
+  pendingFlips:[], flippedByPlayer:[],
+  remainingTime:FLIP_TIME_LIMIT, isTimerPaused:false,
+  frames:0, elapsed:0, lastMessage:'',
+  api: {
+    // fromTray: 'left'(黒) | 'right'(白)
+    swipePlaceStone(fromTray, x, y){
+      const trayColor = fromTray==='left' ? 'black' : 'white';
+      if(G.state==='GAME_OVER') return false;
+      if(trayColor !== G.currentPlayer){ guide(MSG.notYourTurn); return false; }
+      if(G.state!=='PLACING') return false;
+      if(G.mustPass){ guide(MSG.noMoves(playerName(G.currentPlayer)), 'info'); return false; }
+      if(!inBounds(x,y)) return false;
+      if(G.board[y][x]!==null){ guide(MSG.occupied); return false; }
+      if(flipsFor(x,y,G.currentPlayer).length===0){ guide(MSG.illegalPlace); return false; }
+      placeStone(x,y);
+      return true;
+    },
+    tapFlip(x, y){
+      if(G.state!=='FLIPPING' || !inBounds(x,y) || G.board[y][x]===null) return false;
+      handleFlipTap(x,y);
+      return true;
+    },
+    confirmTurn(){ finishTurn(); },
+    forcePass(){ passAction(); },
+    dismissGuidance(){ dismissGuide(); },
+  },
+};
+function syncHooks(){
+  const g = window.__game;
+  g.state = G.state;
+  g.board = G.board;                       // 内部データモデルへの参照（これが正）
+  g.currentPlayer = G.currentPlayer;
+  g.mustPass = G.mustPass;
+  g.pendingFlips = G.pendingFlips;
+  g.flippedByPlayer = G.flippedByPlayer;
+  g.remainingTime = G.remainingTime;
+  g.isTimerPaused = G.isTimerPaused;
+  g.frames = G.frames;
+  g.elapsed = G.elapsed;
+  g.lastMessage = G.lastMessage;
+}
+
+/* ---------- 開始 ---------- */
+startTurn();
+loop();
+</script>
+</body>
+</html>
