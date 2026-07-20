@@ -24,7 +24,7 @@
   html,body{ width:100%; height:100%; overflow:hidden; }
   body{
     font-family:'BIZ UDPGothic', sans-serif;
-    background:radial-gradient(120% 120% at 50% 30%, #8aa4b2 0%, #6c8798 55%, #506b7c 100%);
+    background:radial-gradient(120% 120% at 50% 30%, #ece0c5 0%, #d8c8a3 55%, #bfa97f 100%);
     color:var(--ink);
     touch-action:manipulation;
     overscroll-behavior:none;
@@ -288,21 +288,21 @@ const sound = {
 
 /* ---------- Three.js セットアップ ---------- */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x6c8798);
+scene.background = new THREE.Color(0xc7b184);
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.35;
+renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('stage').appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-scene.add(new THREE.HemisphereLight(0xffffff, 0x6b7f78, 1.6));
-const dir = new THREE.DirectionalLight(0xffffff, 2.1);
-dir.position.set(5, 12, 5);
+scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6b7f78, 0.95));
+const dir = new THREE.DirectionalLight(0xffffff, 2.3);
+dir.position.set(8, 11, -6);
 dir.castShadow = true;
 dir.shadow.mapSize.set(1024, 1024);
 dir.shadow.camera.left = -9; dir.shadow.camera.right = 9;
@@ -310,9 +310,18 @@ dir.shadow.camera.top = 9; dir.shadow.camera.bottom = -9;
 dir.shadow.camera.near = 1; dir.shadow.camera.far = 30;
 dir.shadow.bias = -0.0015;
 scene.add(dir);
-const fillDir = new THREE.DirectionalLight(0xffffff, 0.7);
-fillDir.position.set(-6, 8, -4);
+const fillDir = new THREE.DirectionalLight(0xffffff, 0.3);
+fillDir.position.set(-5, 8, 5);
 scene.add(fillDir);
+
+const camBase = new THREE.Vector3();
+let shakeTime = 0;
+const SHAKE_DURATION = 0.32;
+let shakeMag = 0;
+function triggerShake(mag=0.22){
+  shakeTime = SHAKE_DURATION;
+  shakeMag = mag;
+}
 
 function fitCamera(){
   const w = window.innerWidth, h = window.innerHeight;
@@ -322,7 +331,8 @@ function fitCamera(){
   const distH = 8.4 / (tanV * camera.aspect);
   const distV = 7.4 / tanV;
   const d = Math.max(distH, distV) * 1.06;
-  camera.position.set(0, d*0.82, d*0.66);
+  camBase.set(0, d*0.82, d*0.66);
+  camera.position.copy(camBase);
   camera.lookAt(0, 0, 0.2);
   camera.updateProjectionMatrix();
 }
@@ -333,9 +343,9 @@ fitCamera();
 {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(30, 22),
-    new THREE.MeshStandardMaterial({ color:0xd9c9a3, roughness:.9 }));
+    new THREE.MeshStandardMaterial({ color:0xc7b184, roughness:.95 }));
   floor.rotation.x = -Math.PI/2;
-  floor.position.y = -0.66;
+  floor.position.y = -0.63;
   floor.receiveShadow = true;
   scene.add(floor);
 }
@@ -344,7 +354,7 @@ fitCamera();
 {
   const rim = new THREE.Mesh(
     new THREE.BoxGeometry(N*S+1.0, 0.6, N*S+1.0),
-    new THREE.MeshStandardMaterial({ color:0x4f331e, roughness:.55 }));
+    new THREE.MeshStandardMaterial({ color:0x6b4a2e, roughness:.65 }));
   rim.position.y = -0.32;
   rim.castShadow = true;
   scene.add(rim);
@@ -369,8 +379,8 @@ fitCamera();
 {
   const trayMat = new THREE.MeshStandardMaterial({ color:0x6b4a2e, roughness:.65 });
   for(const sx of [-1, 1]){
-    const tray = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.26, 4.7), trayMat);
-    tray.position.set(sx*TRAY_X, -0.12, 0);
+    const tray = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.6, 4.7), trayMat);
+    tray.position.set(sx*TRAY_X, -0.29, 0);
     tray.castShadow = true;
     scene.add(tray);
   }
@@ -393,6 +403,15 @@ function makeStone(color){
   const stone = { group:grp, color, place:'tray', trayColor:null, cell:null };
   top.userData.owner = stone; bot.userData.owner = stone;
   pickTargets.push(top, bot);
+
+  // タップしやすいよう、見た目には出さない少し大きめの当たり判定用メッシュを重ねる
+  const hit = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.62, 0.62, 0.5, 12),
+    new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false }));
+  hit.userData.owner = stone;
+  grp.add(hit);
+  pickTargets.push(hit);
+
   grp.rotation.x = (color==='black') ? 0 : Math.PI;
   scene.add(grp);
   return stone;
@@ -501,7 +520,7 @@ function guide(text, kind='alert'){
     el('modalTitle').className = (kind==='alert') ? '' : 'info';
     el('modalText').textContent = text;
     el('modal').classList.add('open');
-    if(kind==='alert') sound.error(); else sound.chime();
+    if(kind==='alert'){ sound.error(); triggerShake(0.22); } else sound.chime();
   }, 260);
 }
 function dismissGuide(){
@@ -580,12 +599,9 @@ function handleFlipTap(x, y){
   sound.flip();
   updateHUD();
 
-  // 過不足なく完了 → 自動でそのまま次へ（現実的な進行）
+  // 過不足なく完了 → 待ち時間なしで即座に次へ（反転アニメーションは独立して続く）
   if(G.flippedByPlayer.length === G.pendingFlips.length){
-    const serial = G.turnSerial;
-    setTimeout(()=>{
-      if(serial===G.turnSerial && G.state==='FLIPPING') finishTurn();
-    }, 650);
+    finishTurn();
   }
 }
 
@@ -716,9 +732,8 @@ function onPointerUp(e){
     return;
   }
   if(tapCandidate){
-    const dx = e.clientX-tapCandidate.cx, dy = e.clientY-tapCandidate.cy;
-    const isTap = Math.hypot(dx,dy)<14 && (performance.now()-tapCandidate.t)<600;
-    if(isTap) handleFlipTap(tapCandidate.x, tapCandidate.y);
+    // 盤上の石はドラッグ移動しないため、厳密な距離・時間判定は行わず、押した石をそのままタップとして扱う
+    handleFlipTap(tapCandidate.x, tapCandidate.y);
     tapCandidate = null;
   }
 }
@@ -769,6 +784,21 @@ function loop(){
     el('timerPill').textContent = t;
     el('timerPill').classList.toggle('warn', t<=HINT_AT);
   }
+
+  // カメラシェイク（ルール違反の案内に合わせて画面を揺らす）
+  if(shakeTime>0){
+    shakeTime = Math.max(0, shakeTime - dt);
+    const k = shakeTime/SHAKE_DURATION;
+    const amt = shakeMag*k;
+    camera.position.set(
+      camBase.x + (Math.random()-0.5)*amt,
+      camBase.y + (Math.random()-0.5)*amt*0.5,
+      camBase.z + (Math.random()-0.5)*amt
+    );
+  }else{
+    camera.position.copy(camBase);
+  }
+  camera.lookAt(0, 0, 0.2);
 
   syncHooks();
   renderer.render(scene, camera);
